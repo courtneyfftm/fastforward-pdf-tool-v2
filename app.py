@@ -140,67 +140,44 @@ def extract_transaction_data(pdf_path, doc_type):
         return {}
     
     try:
+        # Simple prompt that just extracts key info as plain text
         message = client.messages.create(
             model="claude-3-5-sonnet-20241022",
-            max_tokens=1000,
+            max_tokens=500,
             messages=[
                 {
                     "role": "user",
-                    "content": f"""Extract transaction data from this {doc_type} document. Return ONLY valid JSON.
+                    "content": f"""From this {doc_type} document, extract any of these if found:
+- Closing date
+- Earnest money amount
+- Purchase price
+- Financing type
+- Buyer name(s)
+- Seller name(s)
+- Property address
 
-Required fields (use null if not found):
-- effective_date (purchase agreement signature date)
-- earnest_money_amount
-- earnest_money_due_date
-- loan_application_deadline
-- financing_type (Conventional/FHA/VA/Cash)
-- inspection_deadline
-- roc_deadline
-- home_warranty_company
-- home_warranty_paid_by
-- closing_date
-- possession_date
-- buyer_first_name
-- buyer_last_name
-- buyer_email
-- buyer_phone
-- seller_first_name
-- seller_last_name
-- seller_email
-- seller_phone
-- title_company
-- lender_name
-- buying_agent_name
-- buying_agent_email
-- selling_agent_name
-- selling_agent_email
-- property_address
-- purchase_price
-- additional_terms
+Document: {text[:2000]}
 
-Document text:
-{text[:3000]}
-
-Return ONLY the JSON object, no other text."""
+List each found item on a new line as: KEY: VALUE"""
                 }
             ]
         )
         
         response_text = message.content[0].text.strip()
-        # Clean up markdown code blocks if present
-        if response_text.startswith('```'):
-            response_text = response_text.split('```')[1]
-            if response_text.startswith('json'):
-                response_text = response_text[4:]
-        response_text = response_text.strip()
         
-        try:
-            return json.loads(response_text)
-        except json.JSONDecodeError:
-            # Return empty dict if JSON parsing fails
-            return {}
+        # Parse the simple key:value format
+        data = {}
+        for line in response_text.split('\n'):
+            if ':' in line:
+                key, value = line.split(':', 1)
+                key = key.strip().lower().replace(' ', '_')
+                value = value.strip()
+                if value and value.lower() != 'not found':
+                    data[key] = value
+        
+        return data
     except Exception as e:
-        # Log but don't crash on extraction errors
+        # Return empty dict on any error
         return {}
 
 @app.route('/')
