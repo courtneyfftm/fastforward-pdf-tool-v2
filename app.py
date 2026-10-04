@@ -36,15 +36,12 @@ def initialize_client(api_key_input):
     global client
     try:
         from anthropic import Anthropic
-        # Create client with just the API key
+        # Create client - let SDK handle initialization
         client = Anthropic(api_key=api_key_input)
-        # Test the connection
         return client
     except Exception as e:
         error_msg = str(e)
-        if "proxies" in error_msg.lower():
-            raise ValueError("Anthropic SDK version incompatible. Please contact support.")
-        raise ValueError(f"Invalid API key or connection error: {error_msg}")
+        raise ValueError(f"API initialization error: Check your API key is valid")
 
 def split_pdf(pdf_path):
     """Split PDF into individual pages/documents"""
@@ -197,9 +194,14 @@ Return ONLY the JSON object, no other text."""
                 response_text = response_text[4:]
         response_text = response_text.strip()
         
-        return json.loads(response_text)
+        try:
+            return json.loads(response_text)
+        except json.JSONDecodeError:
+            # Return empty dict if JSON parsing fails
+            return {}
     except Exception as e:
-        return {"error": str(e)}
+        # Log but don't crash on extraction errors
+        return {}
 
 @app.route('/')
 def index():
@@ -272,10 +274,13 @@ def upload_file():
             'file': output_zip,
             'transaction_data': transaction_data,
             'documents_count': len(sorted_docs)
-        })
+        }), 200
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        error_msg = str(e)
+        traceback.print_exc()
+        return jsonify({'error': error_msg}), 500
 
 @app.route('/download/<path:filepath>')
 def download(filepath):
